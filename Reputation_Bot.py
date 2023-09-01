@@ -1,4 +1,5 @@
 ﻿import datetime
+from xml.dom import NotFoundErr
 import discord
 from discord.ext import commands
 import os
@@ -84,18 +85,6 @@ async def is_repeated(reviewer, reviewee):
         if (total >= threshold):
             await ADMIN.send(f"{reviewer.display_name} has sent {threshold} or more reviews for {reviewee_name.display_name} in the last 24 hours.")
 
-
-@add_feedback.error
-async def feedback_error(ctx, error):
-    """
-    If the user sending the message doesn't use @ before the reported user's name, it will throw an error
-    :param ctx: Message with the error
-    :param error: UserNotFound
-    """
-
-    await ctx.message.add_reaction('❌')
-    await ctx.send("User not found. If user is not in the server, please either invite them and resend your feedback or user their User ID.")
-
 @bot.command(name = "getfeedback")
 async def get_feedback(ctx, user: discord.User):
     """
@@ -121,16 +110,6 @@ async def get_feedback(ctx, user: discord.User):
         await ctx.send("__" + user.display_name + "__\nTotal: " + str(total) + " Positive: " + str(positive) + " Negative: " + str(negative))
     else:
         await ctx.send(user.display_name + " is not in our database.")
-
-#Look to see if get_feedback error can link with feedback_error
-@get_feedback.error
-async def get_error(ctx, error):
-    """
-    :param ctx: Message with the error
-    :param error: UserNotFound
-    """
-    await ctx.message.add_reaction('❌')
-    await ctx.send("User not found.")
 
 @bot.command("getnotes")
 async def get_notes(ctx, user: discord.User):
@@ -159,14 +138,12 @@ async def get_notes(ctx, user: discord.User):
         await ctx.send(user.display_name + " is not in our database.")
         await ctx.message.add_reaction('❌')
 
-#Look to see if error can link with feedback_error
-@get_notes.error
-async def notes_error(ctx, error):
-    """
-    :param ctx: Message with the error
-    :param error: UserNotFound
-    """
-    await ctx.message.add_reaction('❌')
-    await ctx.send("User not found.")
+@bot.event
+async def on_command_error(ctx, error):
+
+    #If the passed user is not in discord's database
+    if isinstance(error, commands.UserNotFound):
+        await ctx.message.add_reaction('❌')
+        await ctx.send("User not found. If user is not in the server, please either invite them and resend your feedback or user their User ID.")
 
 bot.run(TOKEN)
