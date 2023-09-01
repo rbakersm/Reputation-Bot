@@ -1,6 +1,4 @@
 ﻿import datetime
-from pickle import GLOBAL
-from types import NoneType
 import discord
 from discord.ext import commands
 import os
