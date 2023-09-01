@@ -1,4 +1,6 @@
 ﻿import datetime
+from pickle import GLOBAL
+from types import NoneType
 import discord
 from discord.ext import commands
 import os
@@ -19,6 +21,13 @@ user_rep = db.UserRep #User collection
 #Key symbol to identify the start of a command and set the commands of the bot
 bot = commands.Bot(command_prefix='!', intents = intents)
 
+ADMIN = None
+
+@bot.event
+async def on_ready():
+    global ADMIN
+    ADMIN = await bot.fetch_user(194518319900917761)
+
 @bot.command(name = "addfeedback")
 async def add_feedback(ctx, user: discord.User, feedback, *notes):
     """
@@ -28,25 +37,53 @@ async def add_feedback(ctx, user: discord.User, feedback, *notes):
     :param feedback: positive/negative
     :param *notes: Optional notes about transaction
     """
+    #Checks to make sure the user giving feedback is not the same as the user the feedback is about
+    sender = ctx.message.author
 
-    #Checks for a valid feedback input
-    if (feedback.lower() == "positive" or feedback.lower() == "negative"):
-        combined_notes = ' '.join(notes) #Combines tuple into a single string
-        sender = ctx.message.author #Uses to store the reviewer for security checks
-        score = 1 if feedback.lower() == "positive" else -1 #reputation score
-        date = datetime.datetime.utcnow() #Time the feedback is given
+    if (sender.id != user.id):
+        #Checks for a valid feedback input
+        if (feedback.lower() == "positive" or feedback.lower() == "negative"):
+            #Checks to see if a user has given the same user too many feedbacks in a timeframe
+            await is_repeated(sender, user_rep.find_one({"id": user.id}))
+            combined_notes = ' '.join(notes) #Combines tuple into a single string
+            score = 1 if feedback.lower() == "positive" else -1 #reputation score
+            date = datetime.datetime.utcnow() #Time the feedback is given
 
-        #Look for the user in the database
-        if (user_rep.find_one({"id": user.id})):
-            user_rep.update_one({"id": user.id}, {"$push": {"reviews": {"id": sender.id, "score": score, "notes": combined_notes, "date": date}}})
+            #Look for the user in the database
+            if (user_rep.find_one({"id": user.id})):
+                user_rep.update_one({"id": user.id}, {"$push": {"reviews": {"id": sender.id, "score": score, "notes": combined_notes, "date": date}}})
 
+            else:
+                user_rep.insert_one({"id": user.id, "reviews": [{"id": sender.id, "score": score, "notes": combined_notes, "date": date}]})
+
+            await ctx.message.add_reaction('✅')
         else:
-            user_rep.insert_one({"id": user.id, "reviews": [{"id": sender.id, "score": score, "notes": combined_notes, "date": date}]})
-
-        await ctx.message.add_reaction('✅')
+            await ctx.message.add_reaction('❌')
+            await ctx.send("Missing feedback (positive/negative).")
     else:
         await ctx.message.add_reaction('❌')
-        await ctx.send("Missing feedback (positive/negative)")
+        await ctx.send("You cannot give yourself feedback.")
+
+async def is_repeated(reviewer, reviewee):
+    """
+
+    """
+    if (reviewee):
+        reviewee_name = await bot.fetch_user(reviewee['id'])
+        reviews = reviewee["reviews"]
+        total = 0
+        threshold = 5
+
+        date = datetime.datetime.utcnow()
+        maxtime = date - datetime.timedelta(days = 1)
+
+        for entry in reviews:
+            if entry['id'] == reviewer.id and maxtime < entry['date']:
+                total += 1
+
+        if (total >= threshold):
+            await ADMIN.send(f"{reviewer.display_name} has sent {threshold} or more reviews for {reviewee_name.display_name} in the last 24 hours.")
+
 
 @add_feedback.error
 async def feedback_error(ctx, error):
@@ -85,7 +122,6 @@ async def get_feedback(ctx, user: discord.User):
     else:
         await ctx.send(user.display_name + " is not in our database.")
 
-
 #Look to see if get_feedback error can link with feedback_error
 @get_feedback.error
 async def get_error(ctx, error):
@@ -94,6 +130,6 @@ async def get_error(ctx, error):
     :param error: UserNotFound
     """
     await ctx.message.add_reaction('❌')
-    await ctx.send("User not found")
+    await ctx.send("User not found.")
 
 bot.run(TOKEN)
