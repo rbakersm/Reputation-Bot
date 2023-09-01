@@ -66,7 +66,9 @@ async def add_feedback(ctx, user: discord.User, feedback, *notes):
 
 async def is_repeated(reviewer, reviewee):
     """
-
+    Messages the Admin
+    :param reviewer: User being reviewed
+    :param reviewee: User leaving the review
     """
     if (reviewee):
         reviewee_name = await bot.fetch_user(reviewee['id'])
@@ -100,7 +102,7 @@ async def feedback_error(ctx, error):
 async def get_feedback(ctx, user: discord.User):
     """
     If the user exists in the database, output their name and score
-    :param ctx: Message received
+    :param ctx: The message received
     :param user: User to retrieve
     """
 
@@ -125,6 +127,43 @@ async def get_feedback(ctx, user: discord.User):
 #Look to see if get_feedback error can link with feedback_error
 @get_feedback.error
 async def get_error(ctx, error):
+    """
+    :param ctx: Message with the error
+    :param error: UserNotFound
+    """
+    await ctx.message.add_reaction('❌')
+    await ctx.send("User not found.")
+
+@bot.command("getnotes")
+async def get_notes(ctx, user: discord.User):
+    """
+    Gets all the notes associated with the provided user and messages author with a list of the notes
+    :param ctx: The message received
+    :param user: User to get the notes of
+    """
+    
+    db_user = user_rep.find_one({"id": user.id})
+    #Checks for user in the database
+    if (db_user):
+        send_to = await bot.fetch_user(ctx.message.author.id) #User to message
+        notes_list = "" #List of notes
+        reviews = db_user['reviews'] #Reviews of the passed user
+        i = 0
+
+        for entry in reviews:
+            if (entry['notes'] != ""):
+                i += 1
+                notes_list += f"Note {i}: {entry['notes']}\n"
+        
+        await send_to.send(f"__{user.display_name}__\n{notes_list}")
+        await ctx.message.add_reaction('✅')
+    else:
+        await ctx.send(user.display_name + " is not in our database.")
+        await ctx.message.add_reaction('❌')
+
+#Look to see if error can link with feedback_error
+@get_notes.error
+async def notes_error(ctx, error):
     """
     :param ctx: Message with the error
     :param error: UserNotFound
