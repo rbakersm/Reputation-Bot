@@ -8,6 +8,7 @@ from pymongo import MongoClient
 load_dotenv()
 TOKEN = os.getenv("TOKEN") #Discord bot auth token
 CLIENT = os.getenv("CLIENT") #Client connection link
+ADMIN_ID = os.getenv("ADMIN_ID") #User to message for security
 
 intents = discord.Intents.default() #Discord bot permissions
 intents.message_content = True
@@ -16,7 +17,7 @@ SERVER_CLIENT = MongoClient(CLIENT) #Server client
 USER_DATABASE = SERVER_CLIENT.ChroniclesOfArcane #Database
 REP_COLLECTION = USER_DATABASE.UserRep #User collection
 
-#Key symbol to identify the start of a command and set the commands of the bot
+#Key symbol to identify command start and sets bot permissions
 bot = commands.Bot(command_prefix='!', intents = intents)
 
 ADMIN = None
@@ -27,7 +28,7 @@ async def on_ready():
     Sets the Admin user to the provided ID
     """
     global ADMIN
-    ADMIN = await bot.fetch_user(194518319900917761)
+    ADMIN = await bot.fetch_user(ADMIN_ID)
 
 @bot.command(name = "addfeedback")
 async def add_feedback(ctx, feedback_receiver: discord.User, feedback, *notes):
@@ -35,22 +36,29 @@ async def add_feedback(ctx, feedback_receiver: discord.User, feedback, *notes):
     Adds feedback for a user, if the user does not exist in the database, add a new entry for the user.
     :param ctx: The message received
     :param feedback_receiver: User being tracked
-    :param feedback: positive/negative
+    :param feedback: positive/negative/neutral
     :param *notes: Optional notes about transaction
     """
-    #Checks to make sure the user giving feedback is not the same as the user the feedback is about
+
+    #Confirms feedback provider and receiver are no the same user
     feedback_provider = ctx.message.author
 
     if (feedback_provider.id != feedback_receiver.id):
         #Checks for a valid feedback input
-        if (feedback.lower() == "positive" or feedback.lower() == "negative"):
-            #Checks to see if a user has given the same user too many feedbacks in a timeframe
+        if (feedback.lower() == "positive" or feedback.lower() == "negative" or feedback.lower() == "neutral"):
             combined_notes = ' '.join(notes) #Combines tuple into a single string
-            score = 1 if feedback.lower() == "positive" else -1 #reputation score
+            score = 0 #reputation score
+            #If neither positive or negative, score is neutral
+            if (feedback.lower() == "positive"):
+                score = 1
+            elif (feedback.lower() == "negative"):
+                score = -1
+
             date = datetime.datetime.utcnow() #Time the feedback is given
 
             #Look for the user in the database
             if (REP_COLLECTION.find_one({"id": feedback_receiver.id})):
+                #Checks to see if a user has given the same user too many feedbacks in a timeframe
                 await check_if_suspicious(feedback_provider, feedback_receiver)
                 REP_COLLECTION.update_one({"id": feedback_receiver.id}, {"$push": {"reviews": {"id": feedback_provider.id, "score": score, "notes": combined_notes, "date": date}}})
 
@@ -72,7 +80,7 @@ async def check_if_suspicious(feedback_provider, feedback_receiver):
     :param feedback_receiver: User leaving the review
     """
 
-    reviews = REP_COLLECTION.find_one({"id": feedback_receiver})['reviews'] #Receiver's dictionary of reviews
+    reviews = REP_COLLECTION.find_one({"id": feedback_receiver.id})['reviews'] #Receiver's dictionary of reviews
     total_reviews = 0 #Total number of reviews the provider has given the receiver in the time frame
     review_threshold = 5 #Number of reviews the provider has to give to the receiver before it's flagged as suspicious
     date = datetime.datetime.utcnow() #The datetime the review is entered (in UTC)
@@ -103,18 +111,21 @@ async def get_feedback(ctx, feedback_receiver: discord.User):
         total_reviews = 0 #Number of reviews
         positive_reviews = 0 #Number of positive reviews
         negative_reviews = 0 #Number of negative reviews
+        neutral_reviews = 0 #Number of negative reviews
 
         #Goes through each review and adds up each review score
         for entry in reviews:
             total_reviews += 1
             if entry['score'] == 1:
-                positive += 1
+                positive_reviews += 1
             elif entry['score'] == -1:
-                negative += 1
+                negative_reviews += 1
+            elif entry['score'] == 0:
+                neutral_reviews += 1
             else:
                 await ctx.send(f"I cannot compute {entry['score']}")
 
-        await ctx.send(f"__{feedback_receiver.display_name}__\nTotal: {str(total_reviews)} Positive: {str(positive_reviews)} Negative: {str(negative_reviews)}")
+        await ctx.send(f"__{feedback_receiver.display_name}__\nTotal: {str(total_reviews)} Positive: {str(positive_reviews)} Neutral: {str(neutral_reviews)} Negative: {str(negative_reviews)}")
     else:
         await ctx.send(f"{feedback_receiver.display_name} is not in our database.")
 
