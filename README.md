@@ -13,7 +13,7 @@ Utilizes Mongodb to host the database
 2. Install discord.py
 3. Install [pymongo](https://pymongo.readthedocs.io/en/stable/installation.html)
 4. Create a new discord bot [application](https://discord.com/developers/applications)
-5. Load your discord bot auth token into TOKEN
-6. Set Message Content Intent in your application to on
-7. Load your client connection link into CLIENT
-8. Replace the database and collection name with your names
+5. Install dotenv
+6. In a .env file, assign your discord bot auth token as TOKEN={token}, the mongodb client connection link as CLIENT={client}, and your 18-digit discord id as ADMIN_ID={admin_id}
+8. Set Message Content Intent in your application to on
+10. Replace the database and collection name with your names
